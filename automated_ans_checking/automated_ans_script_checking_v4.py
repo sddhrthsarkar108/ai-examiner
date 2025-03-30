@@ -4,7 +4,22 @@ import os
 from pdf2image import convert_from_path
 import pandas as pd
 import re
+import requests
 from fpdf import FPDF
+from dotenv import load_dotenv
+import time
+
+# Add before the API call:
+time.sleep(1)  # 1second delay between calls
+
+# Load environment variables
+load_dotenv()
+
+# Set DeepSeek API key
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
+
+print(f"API Key loaded: {'*' * len(DEEPSEEK_API_KEY)}")
+
 
 # Hardcoded questions dictionary
 questions = {
@@ -81,7 +96,7 @@ def extract_answers_from_pdf(pdf_path):
 
 def evaluate_answers(questions, answers):
     """Evaluate answers based on clarity, completeness, accuracy, examples, and presentation."""
-    prompt = f"""Evaluate the following student answers based on clarity, completeness, accuracy, examples, and presentation.
+    prompt = f"""Evaluate the following student answers based on clarity, completeness, and accuracy.
     Give a score out of the total marks assigned to each question.
 
     Questions and Marks:
@@ -92,20 +107,37 @@ def evaluate_answers(questions, answers):
 
     Provide the score and a short justification for each question."""
 
-    client = openai.OpenAI()
+    url = "https://api.deepseek.com/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    data = {
+        "model": "deepseek-chat",
+        "messages": [
+            {
+                "role": "system",
+                "content": "You are an expert examiner who evaluates student answers based on predefined criteria."
+            },
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        "temperature": 0.1,
+        "max_tokens": 1500
+    }
+
     try:
-        response = client.chat.completions.create(
-            model="gpt-4-turbo",
-            messages=[
-                {"role": "system",
-                 "content": "You are an expert examiner who evaluates student answers based on predefined criteria."},
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=1500
-        )
-        return response.choices[0].message.content.strip()
+        response = requests.post(url, json=data, headers=headers)
+        response.raise_for_status()
+        result = response.json()
+        return result["choices"][0]["message"]["content"].strip()
     except Exception as e:
         print(f"Error during evaluation: {e}")
+        if hasattr(e, 'response') and e.response is not None:
+            print(f"Response content: {e.response.text}")
         return ""
 
 
