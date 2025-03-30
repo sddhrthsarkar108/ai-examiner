@@ -1,0 +1,31 @@
+{
+    "1": ["What are the two most common supervised tasks?", 1],
+    "2": ["What is the purpose of a validation set?", 1],
+    "3": ["How many model parameters are there in a linear regression problem with a single feature variable?", 1],
+    "4": ["What is the AUC value of a perfect classifier?", 1],
+    "5": ["Out of precision and recall, which one is more important for a spam email detection system?", 1],
+    "6": [
+        "What is train-test-split? What do you understand by overfitting and underfitting of training data and how do you prevent them?",
+        5
+    ],
+    "7": [
+        "What are bias and variance of a machine learning model? How do you reduce them? What is the bias-variance trade-off?",
+        5
+    ],
+    "8": [
+        "Explain the cost-functions associated with linear regression and logistic regression problems. What are the general algorithms that are available to minimize the cost-functions?",
+        5
+    ],
+    "9": [
+        "What is the confusion matrix and why is it important? In a classification problem, true negative = 82, false positive =3, false negative=5, true positive=10, determine the following: precision, recall, false negative rate, false positive rate?",
+        5
+    ],
+    "10": [
+        "What is ROC and AUC? Draw a roc curve for perfect classifier, practical classifier, and random classifier? What do you understand about the precision-recall trade-off?",
+        5
+    ],
+    "11": [
+        "Draw and explain a typical ROC curve for the following cases; each figure represents the probability distribution of negative and positive prediction as function of decision threshold of a classifier.",
+        5
+    ]
+} 
