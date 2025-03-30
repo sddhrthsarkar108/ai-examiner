@@ -67,7 +67,7 @@ def extract_text_from_image(image_path):
                  "content": "You are an OCR system that extracts handwritten answers and detects figures from images."},
                 {"role": "user", "content": [
                     {"type": "text",
-                     "text": "Extract all handwritten answers and mention if any figures or diagrams are present."},
+                     "text": "Extract all handwritten answers and mention if any figures or diagrams are present. Clearly identify which question numbers are being answered on this page."},
                     {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
                 ]}
             ],
@@ -94,16 +94,114 @@ def extract_answers_from_pdf(pdf_path):
     return extracted_answers
 
 
-def evaluate_answers(questions, answers):
+def detect_attempted_questions(extracted_answers):
+    """
+    Determine which questions have been attempted by the student.
+    Returns a dictionary of question numbers with True/False values.
+    """
+    # Initialize all questions as unattempted
+    attempted_questions = {str(q_no): False for q_no in questions.keys()}
+    
+    # Regular expressions to detect question numbers in various formats
+    patterns = [
+        r'Q(?:uestion)?\s*#?\s*(\d+)',      # Q1, Question 1, etc.
+        r'(?:^|\n)\s*(\d+)\s*[.:]',        # 1., 1:, etc. at start of line
+        r'Part\s+(?:A|B|C|D)[\s:]*(?:[Qq]uestion)?\s*(\d+)', # Part A: 1, Part B Question 3, etc.
+        r'(?:^|\n)\s*(?:Part\s+(?:A|B))[\s:]*.*?(?:question|Q)?\s*(\d+)', # Part A: 1, etc.
+        r'(?:^|\n)\s*(?:Part\s+(?:A|B))\s*.*?(?:\n|$).*?(?:(?:^|\n)\s*(\d+)[.:])', # Questions under parts
+        r'[Aa]nswer\s*(?:to)?\s*(?:[Qq]uestion)?\s*#?\s*(\d+)', # Answer to Question 1
+    ]
+    
+    # Check all extracted text
+    all_text = ' '.join(extracted_answers.values())
+    
+    # Look for question keywords with numbers
+    for pattern in patterns:
+        matches = re.finditer(pattern, all_text)
+        for match in matches:
+            q_no = match.group(1)
+            if q_no in attempted_questions:
+                attempted_questions[q_no] = True
+    
+    # Additional specific checks for each question
+    for q_no, (question_text, _) in questions.items():
+        # Create key terms from the question to look for in answers
+        key_terms = []
+        if q_no == "1":
+            key_terms = ["classification", "regression", "supervised"]
+        elif q_no == "2":
+            key_terms = ["validation set", "cross validation", "hyperparameter"]
+        elif q_no == "3":
+            key_terms = ["parameter", "linear regression", "feature"]
+        elif q_no == "4":
+            key_terms = ["AUC", "perfect classifier", "1.0", "ROC"]
+        elif q_no == "5":
+            key_terms = ["precision", "recall", "spam", "email"]
+        elif q_no == "6":
+            key_terms = ["train-test", "split", "overfitting", "underfitting"]
+        elif q_no == "7":
+            key_terms = ["bias", "variance", "trade-off", "trade off"]
+        elif q_no == "8":
+            key_terms = ["cost function", "linear regression", "logistic regression", "minimize"]
+        elif q_no == "9":
+            key_terms = ["confusion matrix", "precision", "recall", "false negative", "false positive"]
+        elif q_no == "10":
+            key_terms = ["ROC", "AUC", "curve", "precision-recall"]
+        elif q_no == "11":
+            key_terms = ["ROC curve", "probability distribution", "decision threshold"]
+        
+        # Check if key terms are present in the answers
+        for term in key_terms:
+            if term.lower() in all_text.lower():
+                # If a question's key terms are found but not explicitly labeled, 
+                # only mark as attempted if there's substantial content
+                if not attempted_questions[q_no]:
+                    # Count how many key terms are present
+                    term_count = sum(1 for t in key_terms if t.lower() in all_text.lower())
+                    if term_count >= len(key_terms) // 2:  # If at least half the terms are present
+                        attempted_questions[q_no] = True
+                        break
+    
+    # One more check: if answers have well-defined question numbering
+    for page_text in extracted_answers.values():
+        if "**Part A:**" in page_text or "**Part B:**" in page_text:
+            part_sections = re.split(r'\*\*Part [A-Z]:\*\*', page_text)
+            for section in part_sections:
+                if not section.strip():
+                    continue
+                # Look for numbered items that are likely answers
+                numbered_items = re.findall(r'(?:^|\n)\s*(\d+)\.\s+(.*?)(?=(?:\n\s*\d+\.)|$)', section, re.DOTALL)
+                for num, content in numbered_items:
+                    if num in attempted_questions and content.strip():
+                        attempted_questions[num] = True
+    
+    print("\nAttempted Questions Analysis:")
+    for q_no, attempted in attempted_questions.items():
+        status = "Attempted" if attempted else "Not Attempted"
+        print(f"Question {q_no}: {status}")
+    
+    return attempted_questions
+
+
+def evaluate_answers(questions, answers, attempted_questions):
     """Evaluate answers based on clarity, completeness, accuracy, examples, and presentation."""
     prompt = f"""Evaluate the following student answers based on clarity, completeness, and accuracy.
     Give a score out of the total marks assigned to each question.
-
+    
     Questions and Marks:
     {questions}
 
     Student Answers:
     {answers}
+    
+    Attempted Questions Analysis:
+    {attempted_questions}
+    
+    IMPORTANT INSTRUCTIONS:
+    1. Assign ZERO marks to any question that is marked as "Not Attempted" in the analysis above.
+    2. Only evaluate questions that are actually attempted by the student.
+    3. If a question is marked as "Attempted" but you cannot find clear evidence of an answer, assign ZERO marks.
+    4. Be strict about assigning marks - don't give credit for content from other questions.
 
     Please provide your evaluation in the following format:
     Question|Score|Max Marks|Comments
@@ -117,6 +215,7 @@ def evaluate_answers(questions, answers):
     3. Use the pipe (|) character as a delimiter
     4. Start the table with the header row exactly as shown above
     5. Include all questions in the table
+    6. For unattempted questions, always assign a score of 0 and comment "Not attempted by student"
     """
 
     url = "https://api.deepseek.com/v1/chat/completions"
@@ -130,7 +229,7 @@ def evaluate_answers(questions, answers):
         "messages": [
             {
                 "role": "system",
-                "content": "You are an expert examiner who evaluates student answers based on predefined criteria. Always format your response as a table with pipe-delimited columns."
+                "content": "You are an expert examiner who evaluates student answers based on predefined criteria. Always format your response as a table with pipe-delimited columns. Be very strict about only giving marks to questions that have been attempted."
             },
             {
                 "role": "user",
@@ -205,9 +304,12 @@ def main():
     student_answers = extract_answers_from_pdf(answer_script_pdf)
 
     print(student_answers)
+    
+    print("Analyzing attempted questions...")
+    attempted_questions = detect_attempted_questions(student_answers)
 
     print("Evaluating answers...")
-    evaluation_result = evaluate_answers(questions, student_answers)
+    evaluation_result = evaluate_answers(questions, student_answers, attempted_questions)
 
     print("Evaluation Result:\n", evaluation_result)
 
