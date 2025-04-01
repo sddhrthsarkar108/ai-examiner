@@ -1,8 +1,10 @@
 inputs/
 output/
+answer_sheets/
 tmp/
 .venv/
 .idea/
+.direnv/
 __pycache__/
 
 
