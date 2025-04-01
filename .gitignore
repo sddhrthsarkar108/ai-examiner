@@ -1,12 +1,37 @@
 inputs/
 output/
 answer_sheets/
+extracted_*/
 tmp/
 .venv/
 .idea/
 .direnv/
 __pycache__/
+*/__pycache__/
+*.py[cod]
+*$py.class
 
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+*.egg
 
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Environment
 .env
+.env.*
+!.env.example
+
+# OS specific
 .DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+.vscode/

@@ -12,31 +12,32 @@ ML_EXAMPLES = {
     "equations": [
         "[EQUATION] J(θ) = (1/2m) * Σ(h_θ(x^(i)) - y^(i))^2 where J is the cost function for linear regression [/EQUATION]",
         "[EQUATION] σ(z) = 1/(1+e^(-z)) where σ is the sigmoid activation function [/EQUATION]",
-        "[EQUATION] P(y=1|x) = 1/(1 + e^(-(θ_0 + θ_1*x_1 + ... + θ_n*x_n))) for logistic regression [/EQUATION]"
+        "[EQUATION] P(y=1|x) = 1/(1 + e^(-(θ_0 + θ_1*x_1 + ... + θ_n*x_n))) for logistic regression [/EQUATION]",
     ],
     "figures": [
         "[FIGURE] A graph showing ROC curve with TPR on y-axis (0-1.0) and FPR on x-axis (0-1.0). The curve shows a concave shape above the diagonal line, with an AUC value of approximately 0.85 written next to it. [/FIGURE]",
         "[FIGURE] A confusion matrix diagram with four quadrants labeled: True Positive (45), False Positive (10), False Negative (5), and True Negative (40). Arrows indicate that precision = TP/(TP+FP) and recall = TP/(TP+FN). [/FIGURE]",
-        "[FIGURE] A decision tree with the root node splitting on feature X > 0.7, with Gini impurity=0.4. The left branch leads to a leaf node for class A (samples=30), and the right branch splits further on feature Y > 0.5. [/FIGURE]"
+        "[FIGURE] A decision tree with the root node splitting on feature X > 0.7, with Gini impurity=0.4. The left branch leads to a leaf node for class A (samples=30), and the right branch splits further on feature Y > 0.5. [/FIGURE]",
     ],
     "calculations": [
         "[CALCULATION]\nprecision = TP/(TP+FP)\n= 45/(45+10)\n= 45/55\n= 0.818\n[/CALCULATION]",
         "[CALCULATION]\nF1 score = 2 * (precision * recall)/(precision + recall)\n= 2 * (0.818 * 0.9)/(0.818 + 0.9)\n= 2 * 0.736/1.718\n= 0.857\n[/CALCULATION]",
-        "[CALCULATION]\nEntropy(S) = -Σ p_i * log_2(p_i)\n= -(0.6 * log_2(0.6) + 0.4 * log_2(0.4))\n= -(0.6 * (-0.737) + 0.4 * (-1.322))\n= 0.971\n[/CALCULATION]"
-    ]
+        "[CALCULATION]\nEntropy(S) = -Σ p_i * log_2(p_i)\n= -(0.6 * log_2(0.6) + 0.4 * log_2(0.4))\n= -(0.6 * (-0.737) + 0.4 * (-1.322))\n= 0.971\n[/CALCULATION]",
+    ],
 }
 
 ###################
 # OCR PROMPTS
 ###################
 
+
 def get_ocr_system_prompt(domain_context):
     """
     Generate the system prompt for OCR text extraction.
-    
+
     Args:
         domain_context: The domain context of the exam (e.g., "machine learning exam")
-        
+
     Returns:
         The system prompt for OCR text extraction
     """
@@ -48,11 +49,11 @@ Your job is to extract content exactly as written, not to organize or interpret 
 def get_ocr_user_prompt(domain_context, include_examples=False):
     """
     Generate the user prompt for OCR text extraction.
-    
+
     Args:
         domain_context: The domain context of the exam
         include_examples: Whether to include formatting examples
-        
+
     Returns:
         The user prompt for OCR text extraction
     """
@@ -61,12 +62,13 @@ def get_ocr_user_prompt(domain_context, include_examples=False):
     if include_examples:
         # Select one random example from each category
         import random
+
         selected_examples = [
             random.choice(ML_EXAMPLES["equations"]),
             random.choice(ML_EXAMPLES["figures"]),
-            random.choice(ML_EXAMPLES["calculations"])
+            random.choice(ML_EXAMPLES["calculations"]),
         ]
-        
+
         examples = f"""
 EXAMPLES OF FORMATTING:
 
@@ -79,7 +81,7 @@ Figure description:
 Calculation steps:
 {selected_examples[2]}
 """
-    
+
     return f"""Transcribe all handwritten content from this exam answer image.
 
 YOUR RESPONSIBILITIES:
@@ -115,10 +117,11 @@ This is one page of a multi-page exam."""
 # INTERPRETER PROMPTS
 ###################
 
+
 def get_interpreter_system_prompt():
     """
     Generate the system prompt for interpreting OCR output.
-    
+
     Returns:
         The system prompt for interpreting OCR output
     """
@@ -140,10 +143,10 @@ You should FOCUS on creating a clean, organized structure that will be easy to e
 def get_interpreter_user_prompt(all_ocr_content):
     """
     Generate the user prompt for interpreting OCR output.
-    
+
     Args:
         all_ocr_content: The OCR content to interpret
-        
+
     Returns:
         The user prompt for interpreting OCR output
     """
@@ -199,13 +202,14 @@ IMPORTANT GUIDELINES:
 # EVALUATION PROMPTS
 ###################
 
+
 def get_evaluation_system_prompt(domain_context):
     """
     Generate the system prompt for evaluation.
-    
+
     Args:
         domain_context: The domain context of the exam
-        
+
     Returns:
         The system prompt for evaluation
     """
@@ -221,16 +225,18 @@ You are the FINAL STEP in a processing pipeline:
 3. YOU: Evaluate the correctness and quality of answers"""
 
 
-def get_evaluation_user_prompt(domain_context, questions_table, answers, question_score_template):
+def get_evaluation_user_prompt(
+    domain_context, questions_table, answers, question_score_template
+):
     """
     Generate the user prompt for evaluation.
-    
+
     Args:
         domain_context: The domain context of the exam
         questions_table: The table of questions and maximum marks
         answers: The student answers to evaluate
         question_score_template: Template for scoring questions
-        
+
     Returns:
         The user prompt for evaluation
     """
@@ -278,4 +284,4 @@ STRICT FORMATTING REQUIREMENTS:
 
 The table MUST be wrapped with <SCORE_TABLE> and </SCORE_TABLE> tags exactly as shown.
 
-This table will be automatically parsed by a system, so precise formatting is critical.""" 
+This table will be automatically parsed by a system, so precise formatting is critical."""

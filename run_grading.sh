@@ -43,6 +43,27 @@ else
   echo "Please install direnv or manually source the .envrc file."
 fi
 
+# Sections for help message
+NON_OCR_HELP="
+${BOLD}Non-OCR Mode:${NC}
+  Use -n/--non-ocr to process text files directly instead of PDFs.
+  Specify a text file with -t/--text-file or process all files with -a/--all.
+  Text files should be placed in the extracted_texts/ directory by default.
+  You can change this directory with -x/--extracted-dir.
+"
+
+AGGREGATION_HELP="
+${BOLD}Result Aggregation:${NC}
+  Use -g/--aggregate to combine all individual results into a master spreadsheet.
+  The script will:
+    1. Find the latest run folder for each processed file
+    2. Extract data from the aggregate_evaluation_summary.csv
+    3. Combine all data into a master Excel spreadsheet in the output directory
+  
+  You can also run the aggregation script separately:
+    python aggregate_results.py
+"
+
 # Helper function for displaying usage information
 usage() {
   echo -e "${BOLD}Usage:${NC} $0 [options] [PDF_PATH]"
@@ -55,12 +76,22 @@ usage() {
   echo "  -a, --all                   Process all PDFs in answer_sheets/ directory"
   echo "  -d, --dir DIR               Process all PDFs in specified directory"
   echo "  -m, --multi-llm             Enable multi-provider LLM evaluation (uses different models)"
+  echo "  -n, --non-ocr               Enable non-OCR mode to use pre-extracted text files"
+  echo "  -t, --text-file FILE        Specify text file to use in non-OCR mode"
+  echo "  -x, --extracted-dir DIR     Specify directory containing extracted text files (default: extracted_texts)"
+  echo "  -g, --aggregate             Run aggregation script after processing to create master spreadsheet"
   echo ""
-  echo -e "${BOLD}Arguments:${NC}"
-  echo "  PDF_PATH                    Path to the PDF file to grade (optional)"
-  echo ""
-  echo "If no PDF path is provided and -a/--all is used, all PDFs in answer_sheets/ will be processed."
-  echo "If no PDF path is provided and no -a/--all flag, will use DEFAULT_PDF_PATH from .envrc or prompt for input."
+  echo -e "${BOLD}Force Processing:${NC}"
+  echo "  Use -f to force re-running OCR, or -i to force re-running interpreter."
+  echo "  You can also set SKIP_EXISTING_OUTPUTS=false in .envrc to always process files regardless of existing output."
+  
+  echo -e "$NON_OCR_HELP"
+  echo -e "$AGGREGATION_HELP"
+  
+  echo -e "${BOLD}Example Usage:${NC}"
+  echo "  $0 -a"
+  echo "  $0 -n -t extracted_texts/1_combined.txt"
+  echo "  $0 -d /path/to/pdfs -g"
   exit 1
 }
 
@@ -226,6 +257,10 @@ FORCE_INTERPRETER="false"
 PROCESS_ALL="false"
 CUSTOM_DIR=""
 MULTI_LLM="false"
+NON_OCR_MODE="false"
+TEXT_FILE=""
+EXTRACTED_DIR=""
+RUN_AGGREGATION="true"
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -256,8 +291,24 @@ while [[ $# -gt 0 ]]; do
       MULTI_LLM="true"
       shift
       ;;
+    -n|--non-ocr)
+      NON_OCR_MODE="true"
+      shift
+      ;;
+    -t|--text-file)
+      TEXT_FILE="$2"
+      shift 2
+      ;;
+    -x|--extracted-dir)
+      EXTRACTED_DIR="$2"
+      shift 2
+      ;;
+    -g|--aggregate)
+      RUN_AGGREGATION="true"
+      shift
+      ;;
     *)
-      # Assume it's the PDF path
+      # Assume it's the PDF path or text file path
       PDF_PATH="$1"
       shift
       ;;
@@ -271,6 +322,12 @@ check_dependencies
 if [ ! -d "answer_sheets" ]; then
   mkdir -p "answer_sheets"
   echo -e "${BLUE}Created 'answer_sheets' directory${NC}"
+fi
+
+# Create extracted_texts directory if it doesn't exist
+if [ ! -d "extracted_texts" ]; then
+  mkdir -p "extracted_texts"
+  echo -e "${BLUE}Created 'extracted_texts' directory${NC}"
 fi
 
 # Function to process a single PDF file
@@ -291,6 +348,7 @@ process_pdf() {
   export SHOW_CONFIG="$SHOW_CONFIG"
   export AUTO_REUSE_OCR="$([ "$FORCE_OCR" == "true" ] && echo "false" || echo "true")"
   export AUTO_REUSE_INTERPRETER="$([ "$FORCE_INTERPRETER" == "true" ] && echo "false" || echo "true")"
+  export OCR_NON_OCR_MODE="false"  # Ensure we're in normal OCR mode
   
   # Set multi-LLM evaluation if enabled
   if [ "$MULTI_LLM" == "true" ]; then
@@ -315,8 +373,114 @@ process_pdf() {
   return 0
 }
 
-# Process PDFs based on command line arguments
-if [ "$PROCESS_ALL" == "true" ]; then
+# Function to process a single text file in non-OCR mode
+process_text_file() {
+  local text_file="$1"
+  
+  if [ ! -f "$text_file" ]; then
+    echo -e "${RED}Error: Text file not found: $text_file${NC}"
+    return 1
+  fi
+  
+  echo -e "\n${BLUE}==================================================================${NC}"
+  echo -e "${GREEN}Processing in NON-OCR mode: ${BOLD}$(basename "$text_file")${NC}"
+  echo -e "${BLUE}==================================================================${NC}"
+  
+  # Set environment variables for this run
+  export DEFAULT_PDF_PATH="$text_file"
+  export SHOW_CONFIG="$SHOW_CONFIG"
+  export AUTO_REUSE_OCR="$([ "$FORCE_OCR" == "true" ] && echo "false" || echo "true")"
+  export AUTO_REUSE_INTERPRETER="$([ "$FORCE_INTERPRETER" == "true" ] && echo "false" || echo "true")"
+  export OCR_NON_OCR_MODE="true"  # Enable non-OCR mode
+  
+  # Set custom extracted_texts directory if provided
+  if [ -n "$EXTRACTED_DIR" ]; then
+    export OCR_EXTRACTED_TEXTS_DIR="$EXTRACTED_DIR"
+    echo -e "${BLUE}Using custom extracted texts directory: $EXTRACTED_DIR${NC}"
+  fi
+  
+  # Set multi-LLM evaluation if enabled
+  if [ "$MULTI_LLM" == "true" ]; then
+    echo -e "${YELLOW}Multi-provider LLM evaluation enabled${NC}"
+    echo -e "${YELLOW}Using DeepSeek for runs 1 & 3, and Google/Gemini for run 2${NC}"
+    export EVALUATION_MULTI_PROVIDER_EVALUATION="true"
+  else
+    export EVALUATION_MULTI_PROVIDER_EVALUATION="false"
+  fi
+  
+  # Run the Python script
+  $PYTHON_CMD main.py
+  
+  local exit_code=$?
+  if [ $exit_code -ne 0 ]; then
+    echo -e "${RED}Error processing ${text_file}. Exit code: $exit_code${NC}"
+    return $exit_code
+  fi
+  
+  echo -e "${GREEN}Successfully processed: $(basename "$text_file")${NC}"
+  echo -e "${BLUE}==================================================================${NC}\n"
+  return 0
+}
+
+# Process files based on command line arguments
+if [ "$NON_OCR_MODE" == "true" ]; then
+  # Non-OCR mode: Process text files instead of PDFs
+  echo -e "${YELLOW}Running in NON-OCR mode. Will use pre-extracted text files.${NC}"
+  
+  if [ -n "$TEXT_FILE" ]; then
+    # Process the specified text file
+    process_text_file "$TEXT_FILE"
+  elif [ -n "$PDF_PATH" ]; then
+    # PDF_PATH is actually a text file path in non-OCR mode
+    process_text_file "$PDF_PATH"
+  elif [ "$PROCESS_ALL" == "true" ]; then
+    # Process all text files in extracted_texts directory
+    TARGET_DIR="${EXTRACTED_DIR:-extracted_texts}"
+    echo -e "${BLUE}Processing all text files in ${TARGET_DIR}/ directory...${NC}"
+    
+    # Find all text files in the directory
+    TEXT_FILES=($(find "$TARGET_DIR" -name "*.txt" -type f | sort))
+    
+    if [ ${#TEXT_FILES[@]} -eq 0 ]; then
+      echo -e "${YELLOW}No text files found in ${TARGET_DIR}/ directory.${NC}"
+      exit 0
+    fi
+    
+    echo -e "${BLUE}Found ${#TEXT_FILES[@]} text files to process.${NC}"
+    
+    # Process each text file
+    for text_file in "${TEXT_FILES[@]}"; do
+      process_text_file "$text_file"
+    done
+  else
+    # Let the Python script handle the input
+    echo -e "${BLUE}No text file specified, running with default settings...${NC}"
+    
+    # Set environment variables
+    export SHOW_CONFIG="$SHOW_CONFIG"
+    export AUTO_REUSE_OCR="$([ "$FORCE_OCR" == "true" ] && echo "false" || echo "true")"
+    export AUTO_REUSE_INTERPRETER="$([ "$FORCE_INTERPRETER" == "true" ] && echo "false" || echo "true")"
+    export OCR_NON_OCR_MODE="true"  # Enable non-OCR mode
+    export PROCESS_ALL_FILES="true"  # Process all files in extracted_texts by default
+    
+    # Set custom extracted_texts directory if provided
+    if [ -n "$EXTRACTED_DIR" ]; then
+      export OCR_EXTRACTED_TEXTS_DIR="$EXTRACTED_DIR"
+    fi
+    
+    # Set multi-LLM evaluation if enabled
+    if [ "$MULTI_LLM" == "true" ]; then
+      echo -e "${YELLOW}Multi-provider LLM evaluation enabled${NC}"
+      echo -e "${YELLOW}Using DeepSeek for runs 1 & 3, and Google/Gemini for run 2${NC}"
+      export EVALUATION_MULTI_PROVIDER_EVALUATION="true"
+    else
+      export EVALUATION_MULTI_PROVIDER_EVALUATION="false"
+    fi
+    
+    # Run the main Python script
+    $PYTHON_CMD main.py
+  fi
+elif [ "$PROCESS_ALL" == "true" ]; then
   # Process all PDFs in answer_sheets directory
   TARGET_DIR="answer_sheets"
   echo -e "${BLUE}Processing all PDFs in ${TARGET_DIR}/ directory...${NC}"
@@ -393,3 +557,15 @@ else
 fi
 
 echo -e "\n${GREEN}${BOLD}All processing completed!${NC}" 
+
+# Run aggregation script if requested
+if [ "$RUN_AGGREGATION" == "true" ]; then
+  echo -e "\n${BLUE}Running aggregation script to create master spreadsheet...${NC}"
+  $PYTHON_CMD aggregate_results.py
+  
+  if [ $? -eq 0 ]; then
+    echo -e "${GREEN}Successfully created master evaluation spreadsheet${NC}"
+  else
+    echo -e "${RED}Failed to create master evaluation spreadsheet${NC}"
+  fi
+fi 

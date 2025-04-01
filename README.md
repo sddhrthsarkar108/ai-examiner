@@ -1,6 +1,6 @@
 # Automated Answer Script Grading
 
-This project automatically grades scanned handwritten answer scripts for exams using OCR (Optical Character Recognition) and AI evaluation with LangChain.
+This project automatically grades scanned handwritten answer scripts for exams using OCR (Optical Character Recognition) and AI evaluation.
 
 ## Project Structure
 
@@ -21,8 +21,7 @@ The codebase is organized into the following modules:
 - Generates detailed scoring reports and statistics
 - Configurable domain context for different subjects
 - Adjustable AI parameters for OCR and evaluation
-- **LangChain integration for model abstraction and interchangeability**
-- **Support for multiple model providers** (OpenAI, DeepSeek)
+- **Support for multiple model providers** (OpenAI, Google, DeepSeek)
 
 ## Setup
 
@@ -30,8 +29,7 @@ The codebase is organized into the following modules:
 
 - Python 3.8+
 - Poppler (for PDF processing)
-- OpenAI API key
-- DeepSeek API key
+- API keys for supported model providers (OpenAI, Google, DeepSeek)
 
 ### Installation
 
@@ -40,6 +38,11 @@ The codebase is organized into the following modules:
    ```
    pip install -r requirements.txt
    ```
+   or
+   ```
+   pip install -e .
+   ```
+
 3. Install Poppler:
    - **macOS**: `brew install poppler`
    - **Ubuntu/Debian**: `apt-get install poppler-utils`
@@ -48,17 +51,129 @@ The codebase is organized into the following modules:
 4. Create a `.env` file in the root directory with your API keys:
    ```
    OPENAI_API_KEY=your_openai_api_key_here
+   GOOGLE_API_KEY=your_google_api_key_here
    DEEPSEEK_API_KEY=your_deepseek_api_key_here
    ```
 
+### Environment Setup
+
+The project uses `direnv` to manage environment variables and Python versions. There are two ways to set up your environment:
+
+#### Option 1: Using asdf and direnv (Recommended)
+
+This approach provides version-controlled Python environments:
+
+1. Install `asdf` (version manager):
+   ```bash
+   # On macOS with Homebrew
+   brew install asdf
+
+   # Add to your shell profile (.zshrc or .bash_profile)
+   echo -e "\n. $(brew --prefix asdf)/libexec/asdf.sh" >> ~/.zshrc
+   ```
+
+2. Install required tools automatically using the `.tool-versions` file:
+   ```bash
+   # Navigate to the project directory
+   cd /path/to/project
+   
+   # Install all tools specified in .tool-versions
+   asdf install
+   
+   # This will automatically install:
+   # - direnv 2.35.0
+   # - python 3.12.0
+   ```
+
+   Alternatively, you can install tools individually:
+   ```bash
+   asdf plugin add direnv
+   asdf install direnv 2.35.0
+   asdf global direnv 2.35.0
+   
+   asdf plugin add python
+   asdf install python 3.12.0
+   ```
+
+3. Configure direnv hook in your shell:
+   ```bash
+   # Add direnv hook to your shell
+   echo 'eval "$(direnv hook zsh)"' >> ~/.zshrc  # for zsh
+   # or
+   echo 'eval "$(direnv hook bash)"' >> ~/.bash_profile  # for bash
+   ```
+
+4. Allow the `.envrc` file:
+   ```bash
+   cd /path/to/project
+   direnv allow
+   ```
+
+#### Option 2: Manual Setup (Without asdf)
+
+If you prefer not to use asdf, you can set up the environment manually:
+
+1. Install `direnv` directly:
+   ```bash
+   # On macOS
+   brew install direnv
+   
+   # Add direnv hook to your shell
+   echo 'eval "$(direnv hook zsh)"' >> ~/.zshrc  # for zsh
+   # or
+   echo 'eval "$(direnv hook bash)"' >> ~/.bash_profile  # for bash
+   ```
+
+2. Create a Python virtual environment:
+   ```bash
+   python3 -m venv .venv
+   source .venv/bin/activate
+   pip install -r requirements.txt
+   ```
+
+3. Use the `.envrc` file:
+   ```bash
+   # The repository includes a ready-to-use template
+   # Allow it with direnv
+   direnv allow .envrc
+   ```
+
+   Or create your own `.envrc` file without asdf dependencies:
+   ```bash
+   # Edit .envrc to remove 'use asdf' line
+   ```
+
+4. Alternatively, you can simply run the script and let it fall back to system Python:
+   ```bash
+   # The script will detect missing direnv and use system Python
+   ./run_grading.sh
+   ```
+
+> **Note**: The `run_grading.sh` script is designed with robust fallback mechanisms. Even if you don't have asdf or direnv set up, it will attempt to use your system Python and check for all required dependencies, installing them if necessary. This makes it possible to run the application with minimal setup.
+
+### Verify Your Environment
+
+The project includes a verification script to help you check if your environment is correctly set up:
+
+```bash
+# Make the script executable if it isn't already
+chmod +x verify_env.sh
+
+# Run the verification script
+./verify_env.sh
+```
+
+This script checks for:
+- Python and pip installation
+- direnv and asdf setup (if applicable)
+- Required dependencies (poppler, Python packages)
+- Existence and content of API keys in `.env`
+
+The script provides clear guidance on what's properly configured and what needs attention, helping you troubleshoot any setup issues before running the main application.
+
 ### Configuration
 
-The application uses several configuration files:
-
-1. `config/app_config.json`: General application settings
-2. `config/questions.json`: Exam questions and marks
-
-Default configurations will be created on first run if they don't exist.
+The application uses a flexible configuration system with sensible defaults, environment variables, and optional configuration files.
 
 #### Configuration Options
 
@@ -69,10 +184,9 @@ The OCR settings control how text is extracted from images:
 - `max_tokens`: Maximum number of tokens for the OCR model response (default: 4000)
 - `temperature`: Controls randomness in the OCR model (default: 0.0)
   - Lower values (0.0) produce more consistent extraction results
-  - Higher values introduce more variation
 - `include_examples`: Whether to include examples in the OCR prompt
 - `detail_level`: Level of detail for extraction ("high", "medium", "low")
-- `model`: The model to use for OCR (default: "gpt-4-vision-preview")
+- `model`: The model to use for OCR (default: "gpt-4o")
 - `provider`: The AI provider to use (default: "openai")
 
 ##### Evaluation Configuration Options
@@ -83,7 +197,6 @@ The evaluation settings control how answers are graded:
 - `max_tokens`: Maximum number of tokens for the evaluation model response (default: 1500)
 - `temperature`: Controls randomness in the evaluation model (default: 0.1)
   - Lower values produce more consistent grading
-  - Slightly higher values (0.1) allow for more flexibility in evaluation
 - `model`: The model to use for evaluation (default: "deepseek-chat")
 - `provider`: The AI provider to use (default: "deepseek")
 
@@ -92,82 +205,6 @@ The evaluation settings control how answers are graded:
 - `domain_context`: Subject area context (e.g., "machine learning exam")
 - `output_directory`: Directory for storing results
 - `log_level`: Logging verbosity ("DEBUG", "INFO", "WARNING", "ERROR")
-
-## LangChain Integration
-
-This project uses LangChain to abstract the interaction with different LLM providers:
-
-- **Model Abstraction**: The code interacts with a consistent API regardless of the underlying model
-- **Easy Model Swapping**: Change models by updating the configuration without code changes
-- **Provider Flexibility**: Support for OpenAI, DeepSeek, and ability to add more providers
-- **Maintainable Architecture**: Decoupled from specific provider implementation details
-
-### Currently Supported Providers:
-
-- **OpenAI**: Used for OCR with vision capabilities (default for OCR)
-- **DeepSeek**: Used for evaluation (default for evaluation)
-
-## LLM Factory Integration
-
-This project uses a centralized `LLMFactory` to abstract the interaction with different LLM providers:
-
-- **Model Provider Abstraction**: The factory provides a unified interface to OpenAI, Google, and DeepSeek models
-- **Default Provider Selection**: 
-  - OCR: OpenAI (default: gpt-4o) - best for vision/image processing
-  - Interpreter: Google (default: gemini-2.5-pro-exp-03-25) - excellent for structuring and organizing content
-  - Evaluation: DeepSeek (default: deepseek-chat) - good balance of accuracy and cost-effectiveness
-
-### Configurable Model Selection
-
-You can change the model provider for any component by updating the `provider` field in the app_config.json:
-
-```json
-{
-  "ocr": {
-    "model": "gpt-4o",
-    "provider": "openai"
-  },
-  "interpreter": {
-    "model": "gemini-2.5-pro-exp-03-25",
-    "provider": "google"
-  },
-  "evaluation": {
-    "model": "deepseek-chat",
-    "provider": "deepseek"
-  }
-}
-```
-
-The system will automatically use the appropriate API key from your environment variables based on the selected provider.
-
-## Centralized Prompts
-
-This project uses a centralized prompts module (`prompts.py`) to manage all system and user prompts used throughout the application. This approach provides several benefits:
-
-- **Better Maintainability**: All prompts are defined in one place, making them easier to update and maintain
-- **Consistent Formatting**: Ensures consistent prompt structure across the application
-- **Clear Boundaries**: Reinforces the responsibility boundaries between components
-- **Easier Experimentation**: Facilitates experimenting with different prompt styles without changing core logic
-
-### Prompt Functions
-
-The `prompts.py` module provides the following functions:
-
-- **OCR Prompts**
-  - `get_ocr_system_prompt(domain_context)`: System prompt for OCR text extraction
-  - `get_ocr_user_prompt(domain_context, include_examples)`: User prompt for OCR with optional examples
-
-- **Interpreter Prompts**
-  - `get_interpreter_system_prompt()`: System prompt for interpreting OCR output
-  - `get_interpreter_user_prompt(all_ocr_content)`: User prompt for the interpreter with OCR content
-
-- **Evaluation Prompts**
-  - `get_evaluation_system_prompt(domain_context)`: System prompt for evaluation
-  - `get_evaluation_user_prompt(domain_context, questions_table, answers, question_score_template)`: User prompt for evaluation
-
-### Domain-Specific Examples
-
-The module also includes a collection of domain-specific examples for machine learning content, which can be used to provide few-shot learning examples to the OCR model for better recognition of mathematical notation, diagrams, and calculations.
 
 ## Improved Configuration Management
 
@@ -237,6 +274,8 @@ Special environment variables control the application's behavior for non-interac
 | `DEFAULT_PDF_PATH` | Default PDF to process | File path or empty |
 | `AUTO_REUSE_OCR` | Auto-reuse existing OCR results | `true` or `false` |
 | `AUTO_REUSE_INTERPRETER` | Auto-reuse existing interpreter results | `true` or `false` |
+| `PROCESS_ALL_FILES` | Process all files in directory | `true` or `false` |
+| `SKIP_EXISTING_OUTPUTS` | Skip files with existing output | `true` or `false` |
 
 With these settings, you can configure the application to run completely non-interactively:
 
@@ -259,7 +298,106 @@ The application looks for these environment variables by default:
 - Google: `GOOGLE_API_KEY`
 - DeepSeek: `DEEPSEEK_API_KEY` or `DEEPINFRA_API_TOKEN`
 
+### Default Provider Selection
+
+The application uses optimized defaults for each processing stage:
+
+- **OCR**: OpenAI (default: gpt-4o) - best for vision/image processing
+- **Interpreter**: Google (default: gemini-2.5-pro) - excellent for structuring content
+- **Evaluation**: DeepSeek (default: deepseek-chat) - good balance of accuracy and cost
+
 ## Usage
 
-1. Run the application:
-   ```
+### Running the Grading Script
+
+The application includes a `run_grading.sh` script that simplifies the execution process. Here are common usage examples:
+
+#### Processing PDF Files
+
+```bash
+# Process a single PDF file
+./run_grading.sh answer_sheets/exam01.pdf
+
+# Process a PDF with forced OCR and interpretation (ignores existing results)
+./run_grading.sh -f -i answer_sheets/08.pdf
+
+# Process all PDFs in the answer_sheets directory
+./run_grading.sh -a
+
+# Process PDFs from a custom directory
+./run_grading.sh -d /path/to/custom/pdf/directory
+```
+
+#### Non-OCR Mode (Using Pre-extracted Text)
+
+```bash
+# Process a specific text file in non-OCR mode
+./run_grading.sh -n -t extracted_texts/01_combined.txt
+
+# Process all text files in the extracted_texts directory
+./run_grading.sh -n
+
+# Process all text files from a custom directory
+./run_grading.sh -n -x /path/to/extracted/texts
+```
+
+#### Result Aggregation
+
+```bash
+# Process all PDFs and aggregate results
+./run_grading.sh -a -g
+
+# Process all text files in non-OCR mode and aggregate results
+./run_grading.sh -n -g
+
+# Run aggregation separately after processing
+python aggregate_results.py
+```
+
+#### Additional Options
+
+```bash
+# Show configuration details before running
+./run_grading.sh -s answer_sheets/exam01.pdf
+
+# Use multi-provider LLM evaluation (uses different models)
+./run_grading.sh -m answer_sheets/exam01.pdf
+
+# Display help with all available options
+./run_grading.sh -h
+```
+
+For the most up-to-date information, you can always check the help documentation:
+```bash
+./run_grading.sh -h
+```
+
+## Advanced Usage
+
+### Non-OCR Mode
+
+If you already have extracted text files and want to skip the OCR process, you can use the non-OCR mode:
+
+```bash
+# Process a specific text file in non-OCR mode
+./run_grading.sh -n -t extracted_texts/02_combined.txt
+
+# Process all text files in the extracted_texts directory
+./run_grading.sh -n -a
+```
+
+Text files should follow the format with page markers (e.g., "=== Page 1 ===") to correctly separate content by page.
+
+### Result Aggregation
+
+After processing multiple files, you can aggregate the results into a master spreadsheet:
+
+```bash
+# Process all files and run aggregation after completion
+./run_grading.sh -n -a -g
+
+# Run aggregation separately
+python aggregate_results.py
+```
+
+The aggregation script combines all individual evaluation summaries into a master spreadsheet, making it easier to compare results across different files.
